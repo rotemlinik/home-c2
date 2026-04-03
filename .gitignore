@@ -1,0 +1,17 @@
+# IDE
+.idea/
+
+# secrets
+backend/.env
+
+# sqlite db
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# build artifacts
+backend/housekeeping
+
+# frontend
+frontend/node_modules/
+frontend/dist/
