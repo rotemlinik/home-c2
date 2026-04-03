@@ -23,10 +23,17 @@ func Open(path string) (*sql.DB, error) {
 }
 
 func migrate(db *sql.DB) error {
-	_, err := db.Exec(`
-		PRAGMA journal_mode=WAL;
-		PRAGMA foreign_keys=ON;
+	// PRAGMAs must run outside of transactions
+	db.Exec(`PRAGMA journal_mode=WAL`)
+	db.Exec(`PRAGMA foreign_keys=ON`)
 
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.Exec(`
 		CREATE TABLE IF NOT EXISTS people (
 			id         INTEGER PRIMARY KEY AUTOINCREMENT,
 			name       TEXT NOT NULL,
@@ -118,7 +125,10 @@ func migrate(db *sql.DB) error {
 	}
 
 	// Add source_ref column to tasks if it doesn't exist (SQLite returns an error on duplicate column)
-	db.Exec(`ALTER TABLE tasks ADD COLUMN source_ref TEXT`) //nolint:errcheck — ignored if column already exists
+	tx.Exec(`ALTER TABLE tasks ADD COLUMN source_ref TEXT`) //nolint:errcheck — ignored if column already exists
 
-	return nil
+	// Ensure unique constraint on source_ref for deduplication
+	tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_ref ON tasks(source_ref) WHERE source_ref IS NOT NULL`)
+
+	return tx.Commit()
 }

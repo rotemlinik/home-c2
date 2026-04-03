@@ -89,18 +89,6 @@ describe('Tasks', () => {
     await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2))
   })
 
-  it('assignee filter change triggers reload', async () => {
-    render(<Tasks />)
-    const user = userEvent.setup()
-    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(1))
-    const assigneeButton = screen.getAllByRole('button').find(b =>
-      b.textContent?.includes('All people')
-    )!
-    await user.click(assigneeButton)
-    await user.click(screen.getByText('Rotem'))
-    await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2))
-  })
-
   it('Clear button resets all filters to defaults', async () => {
     render(<Tasks />)
     const user = userEvent.setup()

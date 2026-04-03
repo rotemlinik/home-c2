@@ -119,8 +119,9 @@ func (h *IntegrationsHandler) WhatsAppConnect(w http.ResponseWriter, r *http.Req
 		respondErr(w, err, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	respondJSON(w, map[string]string{"status": "pending_qr"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "pending_qr"}) //nolint:errcheck
 }
 
 func (h *IntegrationsHandler) WhatsAppDisconnect(w http.ResponseWriter, r *http.Request) {

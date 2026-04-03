@@ -10,6 +10,13 @@ vi.mock('../api', () => ({
   deletePerson: vi.fn(),
   gmailStatus: vi.fn(),
   gmailDisconnect: vi.fn(),
+  whatsappStatus: vi.fn(),
+  whatsappConnect: vi.fn(),
+  whatsappDisconnect: vi.fn(),
+  whatsappQR: vi.fn(),
+  whatsappListContacts: vi.fn(),
+  whatsappAddContact: vi.fn(),
+  whatsappRemoveContact: vi.fn(),
 }))
 
 import * as api from '../api'
@@ -19,6 +26,8 @@ beforeEach(() => {
   vi.mocked(api.createPerson).mockResolvedValue({ id: 3, name: 'Alice', created_at: '2026-01-01T00:00:00Z' })
   vi.mocked(api.deletePerson).mockResolvedValue(undefined)
   vi.mocked(api.gmailStatus).mockResolvedValue({ connected: false })
+  vi.mocked(api.whatsappStatus).mockResolvedValue({ status: 'disconnected' })
+  vi.mocked(api.whatsappListContacts).mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -32,6 +41,9 @@ function renderSettings(dark = false, onDarkChange = vi.fn()) {
 describe('Settings', () => {
   it('shows loading state initially', () => {
     vi.mocked(api.listPeople).mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.gmailStatus).mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.whatsappStatus).mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.whatsappListContacts).mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })
@@ -64,33 +76,35 @@ describe('Settings', () => {
     expect(screen.getByRole('button', { name: /add/i })).toBeDisabled()
   })
 
-  it('delete person calls window.confirm; if confirmed calls deletePerson and reloads', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('delete person shows modal; confirming calls deletePerson and reloads', async () => {
     renderSettings()
     const user = userEvent.setup()
     await waitFor(() => expect(screen.getByLabelText('Remove Rotem')).toBeInTheDocument())
     await user.click(screen.getByLabelText('Remove Rotem'))
-    expect(window.confirm).toHaveBeenCalled()
+    // Modal should appear
+    expect(screen.getByText(/Remove Rotem\?/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.deletePerson).toHaveBeenCalledWith(mockPeople[0].id))
     await waitFor(() => expect(api.listPeople).toHaveBeenCalledTimes(2))
   })
 
-  it('delete cancelled if confirm returns false', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('delete cancelled when modal Cancel clicked', async () => {
     renderSettings()
     const user = userEvent.setup()
     await waitFor(() => expect(screen.getByLabelText('Remove Rotem')).toBeInTheDocument())
     await user.click(screen.getByLabelText('Remove Rotem'))
+    expect(screen.getByText(/Remove Rotem\?/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(api.deletePerson).not.toHaveBeenCalled()
   })
 
   it('shows error when deletePerson fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.mocked(api.deletePerson).mockRejectedValue(new Error('Cannot delete'))
     renderSettings()
     const user = userEvent.setup()
     await waitFor(() => expect(screen.getByLabelText('Remove Rotem')).toBeInTheDocument())
     await user.click(screen.getByLabelText('Remove Rotem'))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.getByText('Cannot delete')).toBeInTheDocument())
   })
 

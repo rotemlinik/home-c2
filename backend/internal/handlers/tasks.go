@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -255,11 +256,13 @@ func (h *TasksHandler) Done(w http.ResponseWriter, r *http.Request) {
 			if task.ParentID != nil {
 				parentID = *task.ParentID
 			}
-			h.db.ExecContext(r.Context(), `
+			if _, err := h.db.ExecContext(r.Context(), `
 				INSERT INTO tasks (title, type, recurrence_unit, recurrence_every, due_date, assignee_id, category_id, notes, source, parent_id)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`, task.Title, task.Type, task.Recurrence.Unit, task.Recurrence.Every,
-				nextDue, task.AssigneeID, task.CategoryID, task.Notes, task.Source, parentID)
+				nextDue, task.AssigneeID, task.CategoryID, task.Notes, task.Source, parentID); err != nil {
+				log.Printf("error creating next recurring task for %d: %v", id, err)
+			}
 		}
 	}
 
@@ -355,11 +358,14 @@ func (h *TasksHandler) History(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the root parent
+	// Walk up the parent chain to find the root task
 	rootID := id
-	var parentID sql.NullInt64
-	h.db.QueryRowContext(r.Context(), `SELECT COALESCE(parent_id, id) FROM tasks WHERE id = ?`, id).Scan(&parentID)
-	if parentID.Valid {
+	for {
+		var parentID sql.NullInt64
+		h.db.QueryRowContext(r.Context(), `SELECT parent_id FROM tasks WHERE id = ?`, rootID).Scan(&parentID)
+		if !parentID.Valid {
+			break
+		}
 		rootID = parentID.Int64
 	}
 
@@ -396,7 +402,11 @@ func (h *TasksHandler) getAndRespond(w http.ResponseWriter, r *http.Request, id 
 func nextDate(from string, rec *models.Recurrence) (string, error) {
 	t, err := time.Parse("2006-01-02", from)
 	if err != nil {
-		return "", err
+		// Handle RFC3339 format that SQLite/driver may return
+		t, err = time.Parse(time.RFC3339, from)
+		if err != nil {
+			return "", fmt.Errorf("parse due date %q: %w", from, err)
+		}
 	}
 	switch rec.Unit {
 	case "day":

@@ -154,7 +154,7 @@ func (h *SyncHandler) SyncGmail(w http.ResponseWriter, r *http.Request) {
 			}
 
 			_, err := h.db.ExecContext(r.Context(), `
-				INSERT INTO tasks (title, type, due_date, category_id, status, notes, source, source_ref)
+				INSERT OR IGNORE INTO tasks (title, type, due_date, category_id, status, notes, source, source_ref)
 				VALUES (?, 'one-off', ?, ?, 'pending', ?, 'gmail', ?)
 			`, t.Title, t.DueDate, categoryID, t.Notes, t.EmailID)
 			if err == nil {
@@ -192,7 +192,10 @@ func (h *SyncHandler) SyncHistory(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var e entry
 		var errStr sql.NullString
-		rows.Scan(&e.Source, &e.SyncedAt, &e.EmailsRead, &e.TasksCreated, &errStr)
+		if err := rows.Scan(&e.Source, &e.SyncedAt, &e.EmailsRead, &e.TasksCreated, &errStr); err != nil {
+			log.Printf("sync history: scan error: %v", err)
+			continue
+		}
 		if errStr.Valid {
 			e.Error = &errStr.String
 		}
@@ -262,7 +265,7 @@ func (h *SyncHandler) SyncWhatsApp(w http.ResponseWriter, r *http.Request) {
 			}
 
 			_, err := h.db.ExecContext(r.Context(), `
-				INSERT INTO tasks (title, type, due_date, category_id, status, notes, source, source_ref)
+				INSERT OR IGNORE INTO tasks (title, type, due_date, category_id, status, notes, source, source_ref)
 				VALUES (?, 'one-off', ?, ?, 'pending', ?, 'whatsapp', ?)
 			`, t.Title, t.DueDate, categoryID, t.Notes, t.EmailID)
 			if err == nil {

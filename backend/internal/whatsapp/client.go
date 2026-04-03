@@ -191,14 +191,21 @@ func (c *Client) handleEvent(evt interface{}) {
 	}
 }
 
+// validSessionCols is the allowlist of columns that can be updated in whatsapp_session.
+var validSessionCols = map[string]bool{
+	"status": true, "phone": true, "qr_data": true, "qr_expires_at": true,
+	"connected_at": true, "last_synced_at": true, "error": true,
+}
+
 // upsertSession updates whatsapp_session row (id=1) with the given fields.
 func (c *Client) upsertSession(fields map[string]interface{}) {
-	// Build a base insert first, then update
-	// Simplest approach: always ensure row exists, then apply updates per field
 	c.db.Exec(`INSERT OR IGNORE INTO whatsapp_session (id, status) VALUES (1, 'disconnected')`) //nolint:errcheck
 
 	for col, val := range fields {
-		// Use a simple query per field to avoid dynamic SQL complexity
+		if !validSessionCols[col] {
+			log.Printf("whatsapp: ignoring invalid session column %q", col)
+			continue
+		}
 		c.db.Exec(`UPDATE whatsapp_session SET `+col+` = ? WHERE id = 1`, val) //nolint:errcheck
 	}
 }

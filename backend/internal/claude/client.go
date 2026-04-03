@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -117,33 +118,12 @@ Emails:
 	}
 	defer resp.Body.Close()
 
-	var result struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	if len(result.Content) == 0 {
-		return nil, fmt.Errorf("empty response from claude")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("claude API returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	text := strings.TrimSpace(result.Content[0].Text)
-	// Strip markdown code fences if present
-	if strings.HasPrefix(text, "```") {
-		text = strings.TrimPrefix(text, "```json")
-		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimSuffix(text, "```")
-		text = strings.TrimSpace(text)
-	}
-
-	var tasks []ExtractedTask
-	if err := json.Unmarshal([]byte(text), &tasks); err != nil {
-		return nil, fmt.Errorf("parse tasks JSON: %w", err)
-	}
-
-	return tasks, nil
+	return parseExtractedTasks(resp.Body)
 }
 
 func (c *Client) ExtractTasksFromMessages(ctx context.Context, messages []MessageInput) ([]ExtractedTask, error) {
@@ -210,12 +190,21 @@ Messages:
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("claude API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	return parseExtractedTasks(resp.Body)
+}
+
+func parseExtractedTasks(r io.Reader) ([]ExtractedTask, error) {
 	var result struct {
 		Content []struct {
 			Text string `json:"text"`
 		} `json:"content"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(r).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	if len(result.Content) == 0 {

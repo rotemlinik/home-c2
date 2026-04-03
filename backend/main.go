@@ -33,6 +33,10 @@ func loadEnv(path string) {
 		if !ok {
 			continue
 		}
+		// Strip inline comments (e.g. "value # comment")
+		if idx := strings.Index(val, " #"); idx != -1 {
+			val = val[:idx]
+		}
 		if os.Getenv(strings.TrimSpace(key)) == "" {
 			os.Setenv(strings.TrimSpace(key), strings.TrimSpace(val))
 		}
